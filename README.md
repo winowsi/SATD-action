@@ -21,8 +21,8 @@
    1、新增：
     
 
-![image-20220610102430246](/Users/zhaoyao/Library/Application Support/typora-user-images/image-20220610102430246.png)
+![image-20220610102430246](document/image-20220610102430246.png)
 
 ​	2、修改：
 
-![image-20220610102549885](/Users/zhaoyao/Library/Application Support/typora-user-images/image-20220610102549885.png)
+![image-20220610102549885](document//image-20220610102549885.png)
