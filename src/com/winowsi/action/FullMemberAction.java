@@ -1,5 +1,6 @@
 package com.winowsi.action;
 
+import com.alibaba.fastjson.JSONObject;
 import weaver.conn.RecordSet;
 import weaver.general.Util;
 import weaver.integration.logging.Logger;
@@ -7,8 +8,11 @@ import weaver.integration.logging.LoggerFactory;
 import weaver.integration.util.HTTPUtil;
 import weaver.interfaces.workflow.action.Action;
 import weaver.soa.workflow.request.RequestInfo;
+import weaver.workflow.request.RequestManager;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Description: 转正流程动作将流程里的人员信息状态更新到财务系统U8中
@@ -33,22 +37,20 @@ public class FullMemberAction implements Action {
      * 集成日志拦截器
      */
     private static final Logger log = LoggerFactory.getLogger(FullMemberAction.class);
-
+    private static final String CODE="200";
     @Override
     public String execute(RequestInfo requestInfo) {
-        //封装获取token需要的参数
-        HashMap<String, String> tokenParams = new HashMap<>(12);
+        //流程提示信息
+        RequestManager requestManager = requestInfo.getRequestManager();
         //收集到的表单数据
         HashMap<String, Object> tableParams = new HashMap<>(16);
         //推送数据的Url
         String pushDataUrl = "";
-        //获取token的Url
-        String tokenUrl = "";
         //1、
         //获取流程ID
         String requestId = requestInfo.getRequestid();
         //获取流程的数据库表名
-        String tableName = requestInfo.getRequestManager().getBillTableName();
+        String tableName = requestManager.getBillTableName();
         log.info("转正流程动作的流程ID：" + requestId + "转正流程动作的数据表名：" + tableName);
         RecordSet recordSet = new RecordSet();
         String sql = "select * from ? as mainTable where requestId=?";
@@ -81,24 +83,43 @@ public class FullMemberAction implements Action {
                     "转正说明：" + regularEmployeeExplain +
                     "}");
 
-            //封装表单数据
-            tableParams.put("receiptNumber", receiptNumber);
-            tableParams.put("applicationDate", applicationDate);
-            tableParams.put("proposer", proposer);
-            tableParams.put("applyForDepartment", applyForDepartment);
-            tableParams.put("subordinateToTheLine", subordinateToTheLine);
-            tableParams.put("regularEmployeeName", regularEmployeeName);
-            tableParams.put("regularEmployeeDepartment", regularEmployeeDepartment);
-            tableParams.put("workNumber", workNumber);
-            tableParams.put("regularEmployeeDate", regularEmployeeDate);
-            tableParams.put("regularEmployeeExplain", regularEmployeeExplain);
+            //封装接口数据结构
+            tableParams.put("source", "OA");
+            HashMap<String, Object> personData = new HashMap<>(16);
+            ArrayList<Object> arrayPerson = new ArrayList<>();
+            //封装流程表单数据
+            HashMap<String, String> personInfo = new HashMap<>(16);
 
-            //拿到token
-            String responseToken = HTTPUtil.doPost(tokenUrl, tokenParams);
+            //试用人员
+            personInfo.put("pk_psndoc", "SA0001");
+            //试用开始日期 非必填
+            personInfo.put("dbegingdate", "2022-06-25");
+            //试用结束日期 非必填
+            personInfo.put("denddate", "2022-06-25");
+            //转正日期
+            personInfo.put("dregulardate", "2022-06-26");
+            //转正前人员类别
+            personInfo.put("pk_currpsncl", "0101");
+            //转正后人员类别
+            personInfo.put("pk_newpsncl", "0101");
+            //备注 非必填
+            personInfo.put("vsumm", " ");
+
+            arrayPerson.add(personInfo);
+            personData.put("person",arrayPerson);
+            tableParams.put("data",personData);
             //推送数据
             String responseData = HTTPUtil.doPost(pushDataUrl, tableParams);
-
-            return SUCCESS;
+            Map<String, String> responseDataOrMap = JSONObject.parseObject(responseData, Map.class);
+            String code = responseDataOrMap.get("code");
+            if (CODE.equals(code)){
+                return SUCCESS;
+            }else {
+                log.info("试用转正式流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                requestManager.setMessageid("123#123");
+                requestManager.setMessagecontent("试用转正式流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                return FAILURE_AND_CONTINUE;
+            }
         }
         log.info("试用转正式流程动作的recordSet.next()中的代码没有正常执行");
         return FAILURE_AND_CONTINUE;

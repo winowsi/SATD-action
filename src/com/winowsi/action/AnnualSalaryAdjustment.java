@@ -1,5 +1,6 @@
 package com.winowsi.action;
 
+import com.alibaba.fastjson.JSONObject;
 import weaver.conn.RecordSet;
 import weaver.general.Util;
 import weaver.integration.logging.Logger;
@@ -7,8 +8,11 @@ import weaver.integration.logging.LoggerFactory;
 import weaver.integration.util.HTTPUtil;
 import weaver.interfaces.workflow.action.Action;
 import weaver.soa.workflow.request.RequestInfo;
+import weaver.workflow.request.RequestManager;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Description: 员工调薪流程将流程里的人员信息状态更新到财务系统U8中
@@ -40,17 +44,16 @@ public class AnnualSalaryAdjustment implements Action {
      * 集成日志拦截器
      */
     private static final Logger log = LoggerFactory.getLogger(AnnualSalaryAdjustment.class);
+    private static final String CODE="200";
 
     @Override
     public String execute(RequestInfo requestInfo) {
-        //TODO 调薪流程封装获取token需要的参数
-        HashMap<String, String> tokenParams = new HashMap<>(18);
+        //流程提示信息
+        RequestManager requestManager = requestInfo.getRequestManager();
         //收集到的表单数据
         HashMap<String, Object> tableParams = new HashMap<>(14);
         //推送数据的Url
         String postDataUrl = "";
-        //获取token的Url
-        String tokenUrl = "";
         //1、
         //获取流程ID
         String requestId = requestInfo.getRequestid();
@@ -106,16 +109,44 @@ public class AnnualSalaryAdjustment implements Action {
                     "调整后薪酬总额：" + modulationAfterTotalRemuneration +
                     "}");
 
-            //TODO 调薪流程封装表单数据
-            tableParams.put("proposer", proposer);
+            //封装接口数据结构
+            tableParams.put("source", "OA");
+            HashMap<String, Object> personData = new HashMap<>(16);
+            ArrayList<Object> arrayPerson = new ArrayList<>();
+            //封装流程表单数据
+            HashMap<String, String> personInfo = new HashMap<>(16);
+            //人员编码
+            personInfo.put("pk_psndoc", "SA0001");
+            //调整金额
+            personInfo.put("actpsncount", "1000");
+            //薪资项目
+            personInfo.put("k_wa_item", "0001");
+            //薪资级别
+            personInfo.put("pk_wa_grd", "S1");
+            //定调级标志
+            personInfo.put("fix_adjust_flag ", "Y");
+            //备注
+            personInfo.put("vsumm", "");
+
+            arrayPerson.add(personInfo);
+            personData.put("person",arrayPerson);
+            tableParams.put("data",personData);
 
 
-            //拿到token
-            String responseToken = HTTPUtil.doPost(tokenUrl, tokenParams);
             //推送数据
             String responseData = HTTPUtil.doPost(postDataUrl, tableParams);
+            Map<String, String> responseDataOrMap = JSONObject.parseObject(responseData, Map.class);
+            String code = responseDataOrMap.get("code");
 
-            return SUCCESS;
+            if (CODE.equals(code)){
+                return SUCCESS;
+            }else {
+                log.info("员工调薪流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                requestManager.setMessageid("123#123");
+                requestManager.setMessagecontent("员工调薪流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                return FAILURE_AND_CONTINUE;
+            }
+
         }
         log.info("员工调薪流程动作的recordSet.next()中的代码没有正常执行");
         return FAILURE_AND_CONTINUE;

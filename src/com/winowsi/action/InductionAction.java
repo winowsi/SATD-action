@@ -1,5 +1,6 @@
 package com.winowsi.action;
 
+import com.alibaba.fastjson.JSONObject;
 import weaver.conn.RecordSet;
 import weaver.general.Util;
 import weaver.integration.logging.Logger;
@@ -7,8 +8,11 @@ import weaver.integration.logging.LoggerFactory;
 import weaver.integration.util.HTTPUtil;
 import weaver.interfaces.workflow.action.Action;
 import weaver.soa.workflow.request.RequestInfo;
+import weaver.workflow.request.RequestManager;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 
 /**
@@ -39,17 +43,17 @@ public class InductionAction implements Action {
      * 集成日志拦截器
      */
     private static final Logger log = LoggerFactory.getLogger(InductionAction.class);
+    private static final String CODE="200";
 
     @Override
     public String execute(RequestInfo requestInfo) {
-        //封装获取token需要的参数
-        HashMap<String, String> tokenParams = new HashMap<>(12);
+        //流程提示信息
+        RequestManager requestManager = requestInfo.getRequestManager();
         //收集到的表单数据
         HashMap<String, Object> tableParams = new HashMap<>(16);
         //推送数据的Url
         String pushDataUrl = "";
-        //获取token的Url
-        String tokenUrl = "";
+
         //1、
         //获取流程ID
         String requestId = requestInfo.getRequestid();
@@ -98,16 +102,40 @@ public class InductionAction implements Action {
                     "直接上级:" + immediateSuperior + "任职职务:" + officeJob + "人员来源:" + personnelSource + "人员分类:" + personnelClassification +
                     "}");
 
-            //封装表单数据
-            tableParams.put("name", name);
+            //封装接口数据结构
+            tableParams.put("source", "OA");
+            HashMap<String, Object> personData = new HashMap<>(16);
+            ArrayList<Object> arrayPerson = new ArrayList<>();
+            //封装流程表单数据
+            HashMap<String, String> personInfo = new HashMap<>(16);
+            //人员编码
+            personInfo.put("pk_psndoc", "SA0001");
+            //人员类别编码
+            personInfo.put("pk_psnc", "1010");
+            //部门编码
+            personInfo.put("pk_deptdoc", "10");
+            //入职日期
+            personInfo.put("Inductiondate", "2022-06-26");
+            //备注
+            personInfo.put("vsumm", "  ");
 
+            arrayPerson.add(personInfo);
+            personData.put("person",arrayPerson);
+            tableParams.put("data",personData);
 
-            //拿到token
-            String responseToken = HTTPUtil.doPost(tokenUrl, tokenParams);
             //推送数据
             String responseData = HTTPUtil.doPost(pushDataUrl, tableParams);
+            Map<String, String> responseDataOrMap = JSONObject.parseObject(responseData,Map.class);
+            String code = responseDataOrMap.get("code");
+            if (CODE.equals(code)){
+                return SUCCESS;
+            }else {
+                log.info("入职 offer 审核流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                requestManager.setMessageid("123#123");
+                requestManager.setMessagecontent("入职 offer 审核流程动作请求用友接口返回出错："+responseDataOrMap.get("message")+","+responseDataOrMap.get("code"));
+                return FAILURE_AND_CONTINUE;
+            }
 
-            return SUCCESS;
         }
         log.info("入职 offer 审核流程动作的recordSet.next()中的代码没有正常执行");
         return FAILURE_AND_CONTINUE;
